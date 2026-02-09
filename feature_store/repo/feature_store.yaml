@@ -1,0 +1,176 @@
+# Real-Time Recommender System - Feast Feature Store Configuration
+#
+# This file configures the Feast feature store for the recommendation system.
+# Feast provides both offline (training) and online (serving) feature storage.
+#
+# Offline Store:
+#   - Stores historical feature data
+#   - Used for training data generation
+#   - Currently configured to use Parquet files
+#
+# Online Store:
+#   - Low-latency feature retrieval for serving
+#   - Currently configured to use Redis
+#
+# Entity Keys:
+#   - user: user_id
+#   - item: item_id
+#
+# To initialize the feature store:
+#   1. Copy this file to features_repo/
+#   2. Run: feast apply
+#   3. Run: feast materialize --start-date 2024-01-01 --end-date 2024-01-31
+#
+
+project: recommender-system
+
+# Registry stores feature definitions and metadata
+registry:
+  registry_type: sql
+  path: postgresql://postgres:postgres@localhost:5432/feast_registry
+  # Alternative: Use file-based registry
+  # registry_type: file
+  # path: s3://my-bucket/registry
+
+# Offline store for training data
+offline_store:
+  type: feast_offline_stores.duckdb.DuckDBOfflineStore
+  duckdb_path: /workspace/feature_store/offline_store.duckdb
+
+# Online store for serving (low latency)
+online_store:
+  type: feast_online_stores.redis
+  redis_host: localhost
+  redis_port: 6379
+  redis_db: 0
+
+# Feature server configuration (optional, for online serving)
+feature_server:
+  enabled: true
+  host: 0.0.0.0
+  port: 6566
+
+# Entity definitions
+entities:
+  user:
+    description: "User entity for recommendation system"
+    value_type: STRING
+    joins_keys:
+      - user_id
+
+  item:
+    description: "Item/product entity for recommendation system"
+    value_type: STRING
+    joins_keys:
+      - item_id
+
+# Feature view definitions (loaded from Python modules)
+feature_views:
+  user_features:
+    entities:
+      - user
+    features:
+      - name: activity_level
+        value_type: FLOAT32
+        description: "Normalized activity score (0-1)"
+      - name: session_count
+        value_type: INT64
+        description: "Total number of sessions"
+      - name: account_age_days
+        value_type: INT64
+        description: "Account age in days"
+      - name: last_active_days_ago
+        value_type: INT64
+        description: "Days since last activity"
+      - name: preferred_categories
+        value_type: STRING
+        description: "Comma-separated preferred categories"
+      - name: avg_session_duration_min
+        value_type: FLOAT32
+        description: "Average session duration in minutes"
+      - name: devices_used
+        value_type: INT64
+        description: "Number of unique devices"
+      - name: is_premium
+        value_type: BOOL
+        description: "Premium subscription status"
+      - name: engagement_rate
+        value_type: FLOAT32
+        description: "Historical engagement rate"
+    ttl: 7d
+
+  item_features:
+    entities:
+      - item
+    features:
+      - name: category_encoded
+        value_type: INT64
+        description: "Category identifier"
+      - name: price
+        value_type: FLOAT32
+        description: "Item price"
+      - name: popularity_score
+        value_type: FLOAT32
+        description: "Historical popularity score"
+      - name: avg_rating
+        value_type: FLOAT32
+        description: "Average user rating"
+      - name: review_count
+        value_type: INT64
+        description: "Number of reviews"
+      - name: recency_score
+        value_type: FLOAT32
+        description: "Recency score"
+      - name: quality_score
+        value_type: FLOAT32
+        description: "Computed quality score"
+      - name: content_embedding_0
+        value_type: FLOAT32
+        description: "Content embedding dimension 0"
+      - name: content_embedding_1
+        value_type: FLOAT32
+        description: "Content embedding dimension 1"
+      - name: content_embedding_2
+        value_type: FLOAT32
+        description: "Content embedding dimension 2"
+      - name: content_embedding_3
+        value_type: FLOAT32
+        description: "Content embedding dimension 3"
+      - name: content_embedding_4
+        value_type: FLOAT32
+        description: "Content embedding dimension 4"
+    ttl: 30d
+
+# Data sources for materialization
+data_sources:
+  user_interactions_source:
+    type: feast.data_sources.parquet_file_source.ParquetFileSource
+    path: s3://my-bucket/data/user_interactions/*.parquet
+    timestamp_field: timestamp
+    created_timestamp_column: created_at
+
+  item_metadata_source:
+    type: feast.data_sources.parquet_file_source.ParquetFileSource
+    path: s3://my-bucket/data/items/*.parquet
+    timestamp_field: last_updated
+
+# Feature services (combinations of features for serving)
+feature_services:
+  recommendation_features:
+    description: "Features needed for recommendation model"
+    features:
+      - user_features(activity_level, session_count, engagement_rate)
+      - item_features(category_encoded, price, popularity_score, avg_rating, quality_score)
+      - user_stat_features(views_7d, clicks_7d, ctr_7d)
+      - item_stat_features(views_24h, clicks_24h, ctr_24h, trend_score)
+
+  user_profile_features:
+    description: "User profile features for personalization"
+    features:
+      - user_features(activity_level, preferred_categories, is_premium)
+      - user_stat_features(ctr_7d, diversity_score_7d)
+
+  item_detail_features:
+    description: "Item details for display"
+    features:
+      - item_features(category_name, price, avg_rating, review_count, popularity_score)
