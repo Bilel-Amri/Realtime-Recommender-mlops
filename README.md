@@ -1247,7 +1247,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 *Computer Science Student • ML Engineer • System Architect*
 
 [![GitHub](https://img.shields.io/badge/GitHub-Bilel--Amri-181717?style=for-the-badge&logo=github)](https://github.com/Bilel-Amri)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0A66C2?style=for-the-badge&logo=linkedin)](https://www.linkedin.com/in/bilel-amri)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0A66C2?style=for-the-badge&logo=linkedin)](https://www.linkedin.com/in/amri-bilel-53092b283/)
 
 </div>
 
