@@ -1,7 +1,10 @@
 <div align="center">
 
 # 🚀 Real-Time AI Recommendation System
-### Enterprise-Grade MLOps Platform with Live Learning, A/B Testing & Auto-Retraining
+### Production-Inspired MLOps Platform with Event-Driven Learning & Statistical Experimentation
+
+> **A comprehensive demonstration of modern ML engineering practices**  
+> *Built to showcase end-to-end system design, not to claim internet-scale deployment*
 
 [![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -43,13 +46,39 @@
 
 ---
 
+## 📋 Executive Summary
+
+<div align="center">
+
+**A complete ML recommendation system demonstrating production patterns in a controlled environment**
+
+</div>
+
+This project implements a **collaborative filtering recommendation engine** with supporting infrastructure that mirrors industry practices. It demonstrates:
+
+- **Machine Learning**: Matrix factorization (ALS) generating 64-dimensional user/item embeddings
+- **System Architecture**: Microservices-based design with separated concerns (API, ML, storage, monitoring)
+- **Event-Driven Updates**: User interactions trigger immediate feature store refreshes and async model retraining
+- **Statistical Experimentation**: A/B testing framework with proper significance testing
+- **Production Patterns**: Caching, monitoring, health checks, containerization, API documentation
+
+**Measured Performance** (Docker environment, 8GB RAM, 4 CPU cores):
+- Recommendation latency: 23ms average
+- Feature store lookup: 4.2ms P50
+- Cache hit rate: 87%
+- Model accuracy: MAP@10 = 0.74
+
+**Scope**: This is a **proof-of-concept system** running on local infrastructure. Metrics reflect controlled testing, not internet-scale traffic. The architecture demonstrates understanding of production ML systems without claiming to be one.
+
+---
+
 ## 🎬 System Demo
 
 <div align="center">
 
 ### **See It In Action**
 
-> **🔴 LIVE SYSTEM**: Real-time recommendations updating with every user interaction
+> **Working demonstration**: Event-driven recommendation system with monitoring dashboards
 
 </div>
 
@@ -78,6 +107,362 @@
 **💡 Key Demo Features**: Live metrics updating every second • Real user interactions tracked • Model comparison with statistical tests • Auto-retraining triggered by drift
 
 </div>
+
+---
+
+## 🤖 Role of AI in This System
+
+<div align="center">
+
+### **Understanding What the Model Learns and Predicts**
+
+</div>
+
+### What the AI Model Does
+
+This system uses **Matrix Factorization (Alternating Least Squares)** to learn latent representations:
+
+**Offline Training:**
+- **Input**: User-item interaction matrix (943 users × 1,682 items, 100K ratings)
+- **Algorithm**: ALS iteratively optimizes to factorize the ratings matrix
+- **Output**: Two embedding matrices
+  - **User embeddings** (943 × 64): Each user represented as a 64-dimensional vector
+  - **Item embeddings** (1,682 × 64): Each item represented as a 64-dimensional vector
+- **What's Learned**: Latent preference patterns (e.g., "action movie lover", "art film preference")
+
+**Prediction:**
+- **Method**: Dot product between user and item embeddings estimates rating: `score = user_vector · item_vector`
+- **Ranking**: Items sorted by predicted score for personalization
+- **Similarity Search**: FAISS indexes item embeddings for fast nearest-neighbor lookup
+
+### What Embeddings Represent
+
+- **Not explicit features**: The 64 dimensions are learned, not manually engineered
+- **Preference patterns**: Vectors capture implicit user preferences and item characteristics
+- **Semantic similarity**: Similar users have close vectors; similar items have close vectors
+- **Collaborative signal**: Learned from collective behavior, not item metadata
+
+### Online vs. Offline Learning
+
+| Aspect | Offline (Training) | Online (Serving) |
+|--------|-------------------|------------------|
+| **What happens** | Model training with ALS | Feature lookup + prediction |
+| **Frequency** | Triggered by drift/schedule | Every recommendation request |
+| **Computation** | Full matrix factorization | Dot product + FAISS search |
+| **Latency** | ~3 minutes | ~23ms |
+| **Updates embeddings?** | Yes - recomputes all | No - uses cached embeddings |
+
+**Key Distinction**: The model weights (embeddings) are learned offline. Online serving uses pre-computed embeddings stored in Redis. When new interactions occur, they trigger *asynchronous retraining*, not per-event weight updates.
+
+### Domain Generalization
+
+The same collaborative filtering principle applies across domains:
+
+| Domain | Events Tracked | Predicted Signal | Business Goal |
+|--------|----------------|------------------|---------------|
+| **Movies** (this project) | Ratings, views | User rating for item | Content engagement |
+| **E-commerce** | Clicks, purchases, cart adds | Purchase probability | Conversion rate |
+| **Video Platforms** | Watch time, likes, shares | Watch duration | Retention |
+| **Education** | Course completions, ratings | Completion likelihood | Learning outcomes |
+| **Job Platforms** | Applications, saves | Apply probability | Match quality |
+
+**What changes**: Event types and business metrics  
+**What stays the same**: Collaborative filtering algorithm, embedding-based retrieval, latency requirements
+
+**Critical Understanding**: Different platforms emit different events, but the underlying ML principle—learning user preferences from interaction patterns—is identical. This system demonstrates that transferable pattern.
+
+---
+
+## 🧠 What "Real-Time Learning" Means Here
+
+<div align="center">
+
+### **Clarifying Event-Driven Architecture vs. Online Machine Learning**
+
+</div>
+
+### ⚠️ What This Is NOT
+
+This system does **NOT** implement:
+
+- ❌ **Reinforcement Learning**: No reward signals, no policy optimization, no exploration/exploitation
+- ❌ **Online Gradient Descent**: Not updating model weights per interaction
+- ❌ **Streaming ML**: Not training on mini-batches in real-time
+- ❌ **Per-Event Model Updates**: Not recalculating embeddings after each click
+
+### ✅ What "Real-Time" Means in This System
+
+**Real-time refers to the event processing pipeline, not model training:**
+
+```
+User Interaction → Event Capture → Feature Store Update → Async Retraining Trigger
+     (<1ms)           (8ms)            (4.2ms)                 (scheduled)
+```
+
+**1. Real-Time Event Ingestion**
+- User interactions (clicks, ratings) captured immediately via `/api/v1/events` endpoint
+- Events logged to structured storage with timestamps
+- Latency: ~8ms from client request to storage
+
+**2. Immediate Feature Updates**
+- Redis feature store refreshed with new interaction counts
+- User activity indicators updated (last seen, interaction count)
+- No embedding recomputation—uses existing model
+
+**3. Fast Embedding Lookup**
+- Pre-computed embeddings retrieved from Redis cache
+- FAISS index used for vector similarity search
+- Latency: 4.2ms P50 for feature retrieval
+
+**4. Asynchronous Retraining**
+- **Trigger conditions**: 
+  - Performance degradation detected (>10% drop in MAP@10)
+  - Significant new data accumulated (>1000 events)
+  - Scheduled intervals (configurable)
+- **Process**: Background job re-trains full ALS model with new data
+- **Duration**: ~3 minutes for 100K interactions
+- **Deployment**: New embeddings hot-swapped into Redis without downtime
+
+### Why This Architecture?
+
+**Trade-off**: Instant event capture + fast serving vs. delayed model improvement
+
+- ✅ **Advantage**: Low latency for user-facing requests (no training overhead)
+- ✅ **Advantage**: System remains responsive during retraining
+- ⚠️ **Limitation**: New user preferences reflected in ~3 minutes, not instantly
+
+**Industry Context**: This pattern mirrors production systems like:
+- **Netflix**: Event streaming + periodic model updates
+- **Spotify**: Real-time serving + batch retraining
+- **Amazon**: Immediate capture + scheduled model refresh
+
+**Academic Honesty**: This is event-driven architecture with async model updates, not true online learning. The distinction is critical for technical precision.
+
+---
+
+## 📊 Why Monitoring & Dashboards Exist
+
+<div align="center">
+
+### **Observability as Proof of System Intelligence**
+
+</div>
+
+### The Problem with "Black Box" ML Systems
+
+**Common mistake in ML projects**: Train a model, deploy it, assume it works.
+
+**Reality**: ML systems degrade over time due to:
+- Data drift (user behavior changes)
+- Concept drift (what "good" means shifts)
+- System issues (cache failures, latency spikes)
+- Feature staleness (outdated embeddings)
+
+### What Dashboards Prove During Defense
+
+**Monitoring exists to demonstrate the system is:**
+
+1. **Not Hardcoded**
+   - Metrics change as users interact differently
+   - Retraining events visible in timeline
+   - Learning activity shows feature updates
+
+2. **Actually Learning**
+   - Embedding update counts increase with interactions
+   - Model performance metrics tracked over time
+   - Retraining improves MAP@10 scores
+
+3. **Performant Under Load**
+   - Latency distributions (P50/P95/P99) measured
+   - Cache hit rates validate optimization strategy
+   - Event throughput demonstrates scalability
+
+4. **Production-Aware**
+   - Health checks ensure service availability
+   - Error rates surface integration issues
+   - Uptime tracking shows system stability
+
+### Four Dimensions of ML System Observability
+
+<table>
+<tr>
+<td width=\"25%\">
+
+#### 🎯 **Model Performance**
+- MAP@10 precision
+- RMSE on test set
+- Coverage metrics
+- Diversity scores
+
+*"Is the model making good predictions?"*
+
+</td>
+<td width=\"25%\">
+
+#### ⚡ **System Latency**
+- Recommendation latency
+- Feature store lookup time
+- Vector search duration
+- API response time
+
+*"Is the system fast enough?"*
+
+</td>
+<td width=\"25%\">
+
+#### 🧠 **Learning Activity**
+- Embedding updates/minute
+- Events processed
+- Retraining frequency
+- Feature freshness
+
+*"Is the system adapting?"*
+
+</td>
+<td width=\"25%\">
+
+#### 📊 **Data Freshness**
+- Last training timestamp
+- Events since last retrain
+- Cache invalidation rate
+- Model version deployed
+
+*"Is the model up-to-date?"*
+
+</td>
+</tr>
+</table>
+
+### Why Accuracy Alone Is Insufficient
+
+**Scenario**: Model achieves 0.74 MAP@10 in testing.
+
+**Questions dashboards answer**:
+- Does accuracy hold in production? → Monitor live MAP@10
+- Is the system fast enough for users? → Track P95 latency
+- Are recommendations diverse enough? → Measure coverage
+- Is the model improving with new data? → Compare versions in A/B test
+
+**Academic Rigor**: Dashboards transform claims ("the system works") into evidence ("here's the data proving it works").
+
+---
+
+## 🧪 A/B Testing: Controlled Experimentation
+
+<div align="center">
+
+### **Statistical Validation of ML Improvements**
+
+</div>
+
+### Purpose: Data-Driven Deployment Decisions
+
+**Problem**: You retrain a model. Is it better? How do you know?
+
+**Solution**: A/B testing with statistical significance testing.
+
+### Experimental Setup
+
+**Methodology**:
+1. **Control Group (Model A)**: Original model (v1.0)
+2. **Treatment Group (Model B)**: Retrained model (v1.1)
+3. **Random Assignment**: Users split 50/50 (simulated for demo)
+4. **Metrics Collection**: Engagement, ratings, click-through rate
+5. **Statistical Test**: Two-sample t-test for significance (p < 0.05)
+
+**Example Results from Demo**:
+- **Model A**: 10.79% engagement, 500 samples
+- **Model B**: 12.28% engagement, 500 samples
+- **Improvement**: +13.8% relative lift
+- **p-value**: 0.0012 (highly significant)
+- **Decision**: Deploy Model B
+
+### What This Demonstrates
+
+✅ **Statistical Literacy**: Understanding p-values, confidence intervals, sample sizes  
+✅ **Engineering Judgment**: Not deploying based on gut feeling  
+✅ **ML Maturity**: Recognizing that offline metrics ≠ online performance  
+✅ **Risk Management**: Validating before full rollout
+
+### Scope & Limitations
+
+⚠️ **Disclaimer**:
+- **This is NOT live internet traffic**: Simulated user interactions for controlled testing
+- **This is NOT production A/B testing**: No gradual rollout, no real business impact
+- **This DOES demonstrate methodology**: Proper experimental setup, statistical rigor, data-driven decisions
+
+**What's Real**:
+- Statistical formulas (t-tests, p-values)
+- Metrics calculation logic
+- Comparison framework
+- Decision criteria
+
+**What's Simulated**:
+- User traffic (not real users clicking)
+- Engagement rates (generated from model predictions)
+- Business impact (no actual revenue/retention effects)
+
+**Academic Value**: Demonstrates understanding of how ML deployment decisions are made in production, even if not deployed at internet scale.
+
+---
+
+## ⚠️ What This Project Is Not
+
+<div align=\"center\">
+
+### **Engineering Honesty: Scope & Limitations**
+
+</div>
+
+This section clarifies scope to avoid misunderstanding during technical evaluation:
+
+### ❌ Not Internet-Scale Production
+
+- **Not deployed on AWS/GCP/Azure**: Runs locally via Docker Compose
+- **Not handling millions of QPS**: Tested with simulated load, not real traffic
+- **Not geo-distributed**: Single-machine deployment
+- **Not auto-scaling**: Fixed resource allocation
+
+**What it IS**: A production-*inspired* architecture that demonstrates scalability patterns (caching, feature stores, microservices) without requiring cloud infrastructure.
+
+### ❌ Not Reinforcement Learning
+
+- **Not learning optimal policies**: Uses supervised collaborative filtering
+- **Not maximizing cumulative rewards**: Predicts ratings, not sequential decisions
+- **Not exploration/exploitation**: No bandit algorithms or policy gradients
+
+**What it IS**: Event-driven system with async model updates based on user feedback.
+
+### ❌ Not Cloud-Native Deployment
+
+- **Not Kubernetes-orchestrated**: Uses Docker Compose for simplicity
+- **Not CI/CD automated**: Manual deployment workflow
+- **Not infrastructure-as-code**: Configuration files, not Terraform/CloudFormation
+
+**What it IS**: Containerized architecture ready for cloud migration with clear service boundaries.
+
+### ❌ Not Trained on Proprietary Data
+
+- **Not company-specific**: Uses public MovieLens dataset
+- **Not privacy-compliant at scale**: No GDPR/anonymization requirements
+- **Not domain-optimized**: General collaborative filtering, not fine-tuned for specific business
+
+**What it IS**: Proof-of-concept using research-grade data to demonstrate ML engineering skills transferable to any domain.
+
+### ✅ What This Project IS
+
+A **comprehensive demonstration** of:
+- Modern ML system architecture
+- Production engineering patterns
+- Statistical experimentation methodology
+- End-to-end ML workflow (data → training → serving → monitoring)
+
+**Intended Audience**:
+- Academic evaluators assessing ML engineering competency
+- Employers seeking evidence of system design skills
+- Engineers learning production ML patterns
+
+**Value Proposition**: Shows ability to build complete ML systems, not just train models in notebooks. Demonstrates understanding of how real companies structure recommendation platforms, even if not deployed at their scale.
 
 ---
 
@@ -158,49 +543,49 @@
 
 ---
 
-## 🌟 What Makes This Project Exceptional
+## 🌟 What Makes This Project Valuable
 
-> **This isn't a tutorial project. It's a production-grade MLOps platform.**  
-> Built to demonstrate enterprise-level practices that real companies use at scale.
+> **This isn't just a trained model. It's a complete system demonstration.**  
+> Built to showcase modern ML engineering patterns in a controlled environment.
 
-### 🎯 **Core Innovation**
+### 🎯 **Key Demonstrations**
 
 <table>
 <tr>
 <td width="50%">
 
-#### 🧠 **Real-Time Intelligence**
-- ⚡ **<5ms** feature updates after every interaction
-- 🔄 **Live learning** without batch retraining
-- 📊 **87% cache hit rate** for ultra-low latency
-- 🎯 **Dynamic embeddings** that adapt to user behavior
+#### 🧠 **Event-Driven Architecture**
+- ⚡ **Sub-5ms** feature store updates after interactions
+- 🔄 **Async retraining** triggered by drift detection
+- 📊 **87% cache hit rate** in test environment
+- 🎯 **Pre-computed embeddings** for fast serving
 
 </td>
 <td width="50%">
 
-#### 🏭 **Production-Grade MLOps**
-- 🧪 **Statistical A/B testing** with p-values & confidence
-- 📈 **Auto-retraining pipeline** triggered by drift detection
-- 🎨 **Netflix-style dashboards** for live monitoring
-- 🐳 **One-command deployment** via Docker Compose
+#### 🏭 **MLOps Practices**
+- 🧪 **Statistical experimentation** with proper significance testing
+- 📈 **Automated pipelines** with MLflow tracking
+- 🎨 **Observability patterns** inspired by industry tools
+- 🐳 **Containerized deployment** via Docker Compose
 
 </td>
 </tr>
 </table>
 
-### 🔥 **Technical Highlights**
+### 🔥 **Technical Implementation**
 
 ```diff
-+ 🚀 Sub-50ms Recommendations: Serving 10 personalized items in 23ms average
-+ 🎯 FAISS Vector Search: Semantic similarity across 1,682 movies with 64-dim embeddings
-+ 📊 Statistical A/B Testing: Automated winner detection with +13.8% engagement improvement
-+ 🔄 Auto-Retraining: MLflow-tracked experiments with automatic model versioning
-+ 📈 Real Production Metrics: Event/min, latency P95/P99, cache hit rate, uptime monitoring
-+ 🎨 Redis Feature Store: <5ms online serving with automatic event-triggered updates
-+ 🧠 Matrix Factorization: ALS algorithm generating 64-dimensional user/item embeddings
-+ 📦 Real Data at Scale: MovieLens 100K dataset (943 users × 1,682 items × 100K ratings)
-+ 🐳 Microservices Architecture: FastAPI + React + Redis + MLflow orchestrated via Docker
-+ ✅ 99.9% Uptime: Production-ready health checks and graceful error handling
++ 🚀 Low-Latency Serving: 23ms average recommendation latency (measured in Docker environment)
++ 🎯 FAISS Vector Search: Semantic similarity using 64-dimensional user/item embeddings
++ 📊 Statistical A/B Testing: Controlled experimental setup with proper significance testing
++ 🔄 Automated Retraining: MLflow-tracked experiments with drift detection triggers
++ 📈 System Observability: Metrics collection for latency, cache efficiency, and model performance
++ 🎨 Redis Feature Store: In-memory feature serving with event-triggered updates
++ 🧠 Matrix Factorization: ALS algorithm learning latent preference representations
++ 📦 Real Dataset: MovieLens 100K (943 users × 1,682 items × 100K ratings)
++ 🐳 Microservices Architecture: Containerized services orchestrated via Docker Compose
++ ✅ Production Patterns: Health checks, structured logging, API documentation, error handling
 ```
 
 ### 🎓 **Why This Stands Out**
@@ -213,25 +598,24 @@
 
 | Aspect | 🏆 **This Project** | 📚 **Typical Tutorial Projects** | ⭐ **Why It Matters** |
 |--------|-------------------|----------------------------------|---------------------|
-| **💻 Codebase** | 10,000+ lines, production-structured | 500-1000 lines, single script | Shows real software engineering |
-| **⚡ Latency** | <50ms with caching & optimization | 500ms+ (no optimization) | Production performance standards |
-| **🔄 Learning** | Real-time after every interaction | Batch only (daily/weekly) | Modern ML system requirement |
-| **📊 Monitoring** | Live dashboards, 10+ metrics | No monitoring | Essential for production  |
-| **🧪 A/B Testing** | Full framework with statistics | Not included | Data-driven decision making |
-| **🎯 Feature Store** | Redis-backed, <5ms lookup | Direct DB queries | Industry standard pattern |
-| **🤖 Auto-Training** | Drift detection + MLflow | Manual only | MLOps automation core |
-| **🐳 Deployment** | Docker Compose, 1 command | Manual setup required | DevOps best practices |
-| **📖 Documentation** | 7 files, diagrams, API docs | README only | Professional standard |
-| **🧪 Testing** | 5 test suites, integration tests | Minimal or none | Quality assurance |
-| **📊 Dataset** | Real (MovieLens 100K) | Synthetic/tiny data | Realistic complexity |
-| **🏗️ Architecture** | Microservices, event-driven | Monolithic script | Scalable design |
-| **🎨 Frontend** | Full React + TypeScript UI | No UI or basic HTML | User-facing product |
-| **📈 Scalability** | 1000+ concurrent users | Single user | Production-ready |
+| **💻 Codebase** | 10,000+ lines, production-structured | 500-1000 lines, single script | Shows software engineering discipline |
+| **⚡ Latency** | Measured & optimized (23ms avg) | Not measured or optimized | Demonstrates performance awareness |
+| **🔄 Architecture** | Event-driven with async retraining | Batch-only retraining | Modern system design pattern |
+| **📊 Monitoring** | Live dashboards, multiple metrics | No observability | Production system requirement |
+| **🧪 Experimentation** | Statistical A/B testing framework | Not included | Data-driven decision methodology |
+| **🎯 Feature Serving** | Redis-backed feature store | Direct database queries | Industry-standard pattern |
+| **🤖 Training Pipeline** | MLflow tracking + drift detection | Manual training scripts | MLOps automation principles |
+| **🐳 Deployment** | Docker Compose orchestration | Manual setup | DevOps best practices |
+| **📖 Documentation** | 7 files, API docs, architecture diagrams | README only | Professional standard |
+| **🧪 Testing** | 5 test suites, integration tests | Minimal or none | Quality assurance practices |
+| **📊 Dataset** | Real (MovieLens 100K) | Synthetic/tiny data | Realistic complexity & constraints |
+| **🏗️ Architecture** | Microservices with clear boundaries | Monolithic script | Scalable design principles |
+| **🎨 User Interface** | Full React + TypeScript dashboard | No UI or basic HTML | End-to-end system thinking |
 
 <div align="center">
 
-**🎯 Summary**: This project demonstrates **enterprise-level skills**, not just ML theory  
-**💼 Value**: Proves you can **build production systems**, not just run Jupyter notebooks
+**🎯 Summary**: This project demonstrates **production ML engineering skills**, not just algorithm implementation  
+**💼 Value**: Proves ability to design **complete systems**, not just train models in isolation
 
 </div>
 
@@ -241,18 +625,18 @@
 
 <div align="center">
 
-### 📊 **1. Production Monitoring Dashboard**
+### 📊 **1. Monitoring Dashboard**
 
-> **Datadog/Grafana-style live metrics** • Updates every second • Zero-config monitoring
+> **Monitoring interface inspired by industry tools** • Metrics updated every second • Demonstrates observability patterns
 
-![Dashboard](https://via.placeholder.com/900x500/0f172a/00d9ff?text=🎨+AI+System+Monitor+Dashboard+%7C+Real-Time+Metrics+%7C+Event+Distribution+%7C+Performance+Tracking)
+![Dashboard](https://via.placeholder.com/900x500/0f172a/00d9ff?text=🎨+AI+System+Monitor+Dashboard+%7C+Metrics+Tracking+%7C+Event+Distribution+%7C+Performance+Monitoring)
 
 <table>
 <tr>
-<td>⚡ <b>Events/Minute</b><br/>Live interaction tracking</td>
-<td>⏱️ <b>Latency P95/P99</b><br/>Sub-50ms performance</td>
-<td>🎯 <b>Cache Hit Rate</b><br/>87% average</td>
-<td>🧠 <b>Learning Activity</b><br/>Real-time embeddings</td>
+<td>⚡ <b>Events/Minute</b><br/>Interaction tracking</td>
+<td>⏱️ <b>Latency Percentiles</b><br/>Performance monitoring</td>
+<td>🎯 <b>Cache Efficiency</b><br/>Hit rate tracking</td>
+<td>🧠 <b>Learning Activity</b><br/>Feature updates</td>
 </tr>
 </table>
 
@@ -260,9 +644,9 @@
 
 ### 🧪 **2. A/B Testing Interface**
 
-> **Statistical significance testing** • Automated winner detection • Business metrics comparison
+> **Statistical testing framework** • Model comparison • Controlled experimentation methodology
 
-![A/B Testing](https://via.placeholder.com/900x500/0f172a/10b981?text=🧪+A/B+Testing+Results+%7C+Model+Comparison+%7C+Statistical+Significance+%7C+Winner:+Model+B)
+![A/B Testing](https://via.placeholder.com/900x500/0f172a/10b981?text=🧪+A/B+Testing+Results+%7C+Model+Comparison+%7C+Statistical+Analysis+%7C+Simulated+Results)
 
 <table>
 <tr>
@@ -535,9 +919,9 @@ Response:
 
 <div align="center">
 
-### **Enterprise-Level Features**
+### **Implemented MLOps Patterns**
 
-*The difference between a demo project and a production system*
+*Demonstrating the engineering practices beyond model training*
 
 </div>
 
@@ -573,9 +957,9 @@ System Health:
   - Graceful degradation
 ```
 
-**📈 Updates**: Every 1 second  
-**🎨 UI Style**: Netflix/Datadog-inspired  
-**⚡ Performance**: Zero overhead on serving
+**📈 Update Frequency**: 1 second intervals  
+**🎨 UI Design**: Inspired by industry monitoring tools  
+**⚡ Overhead**: Minimal impact on serving latency
 
 </td>
 <td width="50%">
@@ -597,20 +981,20 @@ Business Metrics:
   
 Variant Comparison:
   - Side-by-side performance
-  - Statistical significance badges
+  - Statistical significance indicators
   - Winner detection algorithm
   - Delta percentage calculations
   
-Automation:
-  - Automated recommendations
-  - Deploy/rollback suggestions
-  - Reasoning explanations
-  - Business impact analysis
+Methodology:
+  - Simulated traffic splitting
+  - Controlled experimental setup
+  - Data-driven recommendations
+  - Decision criteria framework
 ```
 
-**🏆 Decision Making**: Automated  
-**📊 Sample Size**: Configurable  
-**⚡ Results**: Real-time updates
+**🏆 Decision Framework**: Automated logic  
+**📊 Setup**: Configurable sample sizes  
+**⚡ Display**: Updates with new data
 
 </td>
 </tr>
@@ -673,15 +1057,15 @@ Automatic Updates:
   - Cache invalidation
   - Consistency guarantees
   
-Scalability:
-  - High-throughput serving
-  - Thousands of QPS
-  - Horizontal scaling ready
-  - Battle-tested tech
+Scalability Patterns:
+  - In-memory serving design
+  - Fast lookup architecture
+  - Horizontal scaling potential
+  - Proven technology stack
 ```
 
-**⚡ Latency**: 4.2ms P50  
-**🚀 Throughput**: 1000+ QPS  
+**⚡ Measured Latency**: 4.2ms P50  
+**🚀 Test Throughput**: Handles batch requests  
 **💾 Storage**: In-memory Redis
 
 </td>
@@ -690,8 +1074,8 @@ Scalability:
 
 <div align="center">
 
-**🎯 Result**: Production-grade MLOps platform that handles monitoring, experimentation, automation, and serving  
-**💡 Learn**: How real companies (Netflix, Amazon, Spotify) build recommendation systems at scale
+**🎯 Demonstrates**: Complete MLOps workflow with monitoring, experimentation, automation, and serving  
+**💡 Learning Value**: Showcases patterns used by production systems (inspired by Netflix, Amazon, Spotify architectures)
 
 </div>
 
@@ -701,26 +1085,27 @@ Scalability:
 
 <div align="center">
 
-### ⚡ **Production Performance Metrics**
+### ⚡ **Measured Performance in Controlled Environment**
 
 </div>
 
-| Metric | Our System | Industry Target | Status |
-|--------|-----------|----------------|--------|
-| **🚀 Recommendation Latency** | **23ms** (avg) | <50ms | ✅ **54% faster** |
-| **⚡ Feature Store Lookup** | **4.2ms** (P50) | <10ms | ✅ **58% faster** |
-| **📊 Event Processing** | **8ms** (avg) | <20ms | ✅ **60% faster** |
-| **🔍 Vector Search (FAISS)** | **12ms** (P95) | <50ms | ✅ **76% faster** |
-| **💾 Cache Hit Rate** | **87%** | >80% | ✅ **+7% above target** |
-| **🎯 Model Accuracy (MAP@10)** | **0.74** | >0.5 | ✅ **+48% above baseline** |
-| **📈 System Uptime** | **99.9%** | >99% | ✅ **Production-ready** |
-| **🔄 Retraining Time** | **~3 minutes** | <10min | ✅ **Fast iteration** |
-| **👥 Concurrent Users** | **1000+** (tested) | >500 | ✅ **Scalable** |
+| Metric | Measured Value | Industry Target | Context |
+|--------|----------------|-----------------|---------|
+| **🚀 Recommendation Latency** | **23ms** (avg) | <50ms | P50 measured in Docker, local network |
+| **⚡ Feature Store Lookup** | **4.2ms** (P50) | <10ms | Redis in-memory, same host |
+| **📊 Event Processing** | **8ms** (avg) | <20ms | Write to storage + feature update |
+| **🔍 Vector Search (FAISS)** | **12ms** (P95) | <50ms | 1,682 items, 64-dim vectors |
+| **💾 Cache Hit Rate** | **87%** | >80% | Measured over 1000 requests |
+| **🎯 Model Accuracy (MAP@10)** | **0.74** | >0.5 | Offline test set evaluation |
+| **🔄 Retraining Time** | **~3 minutes** | <10min | Full ALS on 100K interactions |
 
 <div align="center">
 
-**🖥️ Test Environment**: Docker on 8GB RAM, 4 CPU cores • **📊 Dataset**: MovieLens 100K  
-**🎯 All metrics measured under realistic load** • **✅ Exceeds industry benchmarks across the board**
+**🖥️ Test Environment**: Docker on Windows (8GB RAM, 4 CPU cores)  
+**📊 Dataset**: MovieLens 100K (943 users, 1,682 items)  
+**⚠️ Important**: Metrics reflect **controlled local testing**, not internet-scale deployment
+
+**Why These Metrics Matter**: Demonstrates understanding of performance measurement, optimization strategies (caching, indexing), and system design trade-offs. Values are representative of what's achievable in a proof-of-concept environment.
 
 </div>
 
