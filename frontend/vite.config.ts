@@ -6,6 +6,10 @@ export default defineConfig({
   server: {
     port: 3000,
     host: '0.0.0.0',
+    watch: {
+      usePolling: true,   // Required for Docker on Windows (inotify doesn't propagate)
+      interval: 300,
+    },
     proxy: {
       '/api': {
         target: 'http://backend:8000',

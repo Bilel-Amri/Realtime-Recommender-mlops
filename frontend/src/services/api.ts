@@ -278,6 +278,80 @@ export const metricsApi = {
 };
 
 /**
+ * User Profile API — Dynamic interest-based personalisation
+ */
+export interface UserProfile {
+  user_id: string;
+  interests: Record<string, number>;
+  vector: number[];
+  interaction_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InterestItem {
+  category: string;
+  weight: number;
+  label: string;
+}
+
+export const INTEREST_CATEGORIES = [
+  'action',
+  'comedy',
+  'drama',
+  'romance',
+  'thriller',
+  'sci_fi',
+  'horror',
+  'documentary',
+] as const;
+
+export type InterestCategory = typeof INTEREST_CATEGORIES[number];
+
+export const userApi = {
+  /** Create or overwrite a user profile with explicit interest weights. */
+  async createProfile(
+    userId: string,
+    interests: Partial<Record<InterestCategory, number>>
+  ): Promise<UserProfile> {
+    const response = await apiClient.post<UserProfile>(
+      `/users/${encodeURIComponent(userId)}/profile`,
+      { interests }
+    );
+    return response.data;
+  },
+
+  /** Retrieve the full profile for a user (404 if none). */
+  async getProfile(userId: string): Promise<UserProfile> {
+    const response = await apiClient.get<UserProfile>(
+      `/users/${encodeURIComponent(userId)}/profile`
+    );
+    return response.data;
+  },
+
+  /** Update a single interest dimension. */
+  async updateInterest(
+    userId: string,
+    attribute: InterestCategory,
+    weight: number
+  ): Promise<UserProfile> {
+    const response = await apiClient.put<UserProfile>(
+      `/users/${encodeURIComponent(userId)}/interests`,
+      { attribute, weight }
+    );
+    return response.data;
+  },
+
+  /** Get interests sorted by weight descending. */
+  async getTopInterests(userId: string): Promise<InterestItem[]> {
+    const response = await apiClient.get<InterestItem[]>(
+      `/users/${encodeURIComponent(userId)}/top-interests`
+    );
+    return response.data;
+  },
+};
+
+/**
  * Health API
  */
 export const healthApi = {
@@ -321,4 +395,5 @@ export default {
   events: eventsApi,
   metrics: metricsApi,
   health: healthApi,
+  user: userApi,
 };

@@ -186,7 +186,7 @@ class RecommendationService:
                     score=score,
                     rank=rank,
                     reason="Popular item for new users",
-                    metadata={"source": "cold_start"},
+                    metadata=self._get_item_metadata(item_id),
                 )
             )
 
@@ -220,6 +220,12 @@ class RecommendationService:
 
         # Check for cold start
         is_cold_start = await self._is_cold_start_user(request.user_id)
+
+        # A user with a dynamic interest profile is never cold-start
+        from .user_profile import get_user_profile_service as _get_ups
+        _ups = _get_ups()
+        if _ups is not None and _ups.has_profile(request.user_id):
+            is_cold_start = False
 
         if is_cold_start:
             self._metrics["cold_start_requests"] += 1
@@ -474,6 +480,20 @@ class RecommendationService:
         Returns:
             Array of scores for each candidate
         """
+        # Dynamic user profile takes priority — cosine similarity scoring
+        if user_id and item_ids:
+            from .user_profile import get_user_profile_service
+            profile_svc = get_user_profile_service()
+            if profile_svc is not None:
+                profile_scores = profile_svc.score_items(user_id, item_ids)
+                if profile_scores is not None:
+                    logger.info(
+                        "dynamic_profile_scoring",
+                        user_id=user_id,
+                        num_items=len(item_ids),
+                    )
+                    return profile_scores
+
         if self._model is None:
             # Return mock scores for development
             return np.random.rand(len(item_features))
@@ -591,7 +611,11 @@ class RecommendationService:
         Returns:
             Dictionary of item metadata
         """
-        return {"category": "general", "available": True}
+        try:
+            from .movie_catalog import get_item_metadata
+            return get_item_metadata(item_id)
+        except Exception:
+            return {"title": item_id, "genres": [], "available": True}
 
     def _get_model_version(self) -> str:
         """

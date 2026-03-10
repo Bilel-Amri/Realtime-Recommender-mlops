@@ -29,11 +29,12 @@ from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from structlog.contextvars import clear_contextvars
 
-from .api import events_router, health_router, metrics_router, recommend_router, mlops_router
+from .api import events_router, health_router, metrics_router, recommend_router, mlops_router, users_router
 from .core.config import settings
 from .core.logging import configure_logging, get_logger
 from .models.schemas import ErrorResponse
 from .services.monitoring import get_monitoring_service
+from .services.movie_catalog import init_movie_catalog
 from .services.recommendation import get_recommendation_service
 
 # Configure structured logging
@@ -60,6 +61,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Dict[str, Any], None]:
         environment=settings.app_env,
     )
 
+    # Load movie catalog (MovieLens titles)
+    try:
+        loaded = init_movie_catalog()
+        logger.info("movie_catalog_loaded", items=loaded)
+    except Exception as e:
+        logger.warning("movie_catalog_load_failed", error=str(e))
+
     # AUTOMATIC TRAINING CHECK
     try:
         from .training.auto_train import should_train_model, train_model
@@ -84,6 +92,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Dict[str, Any], None]:
     except Exception as e:
         logger.warning("model_loading_failed", error=str(e))
         # Continue without model - will use cold start
+
+    # Initialize UserProfileService backed by Redis
+    try:
+        import redis as redis_lib
+        from .services.user_profile import init_user_profile_service
+        _redis_client = redis_lib.Redis(
+            host=settings.redis_host,
+            port=settings.redis_port,
+            db=0,
+            decode_responses=True,
+            socket_timeout=5.0,
+            socket_connect_timeout=5.0,
+        )
+        _redis_client.ping()  # verify connection
+        init_user_profile_service(_redis_client)
+        logger.info("user_profile_service_initialized")
+    except Exception as e:
+        logger.warning("user_profile_service_init_failed", error=str(e))
 
     # Initialize monitoring
     monitoring_service = get_monitoring_service()
@@ -217,6 +243,7 @@ app.include_router(recommend_router, prefix="/api/v1")
 app.include_router(events_router, prefix="/api/v1")
 app.include_router(metrics_router, prefix="/api/v1")
 app.include_router(mlops_router, prefix="/api/v1")  # 🔥 Dynamic MLOps endpoints
+app.include_router(users_router, prefix="/api/v1")  # 🧠 Dynamic User Profiles
 
 
 @app.get("/", tags=["Root"])

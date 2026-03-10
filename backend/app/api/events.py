@@ -89,6 +89,71 @@ async def log_event(event: EventCreate) -> EventResponse:
         monitoring_service = get_monitoring_service()
         monitoring_service.record_event(event.event_type.value)
 
+        # 🧠 DYNAMIC INTEREST UPDATE: nudge user's genre interest vector
+        # based on the genres of the interacted item and the event strength.
+        try:
+            from ..services.user_profile import get_user_profile_service
+            from ..services.movie_catalog import get_item_metadata
+
+            profile_svc = get_user_profile_service()
+            if profile_svc and profile_svc.has_profile(event.user_id):
+                item_meta = get_item_metadata(event.item_id)
+                genres = item_meta.get("genres", [])
+
+                # Map event → strength delta (positive = boost, negative = suppress)
+                evt = event.event_type.value
+                if evt == "view":
+                    delta = 0.04
+                elif evt in ("click", "share"):
+                    delta = 0.07
+                elif evt == "like":
+                    delta = 0.12
+                elif evt == "dislike":
+                    delta = -0.12
+                elif evt == "rating" and event.value is not None:
+                    # rating 1-5: map to [-0.15, +0.15]
+                    delta = (event.value - 3.0) / 2.0 * 0.15
+                else:
+                    delta = 0.0
+
+                # Genre names in catalog use Title Case; our interest categories are lower
+                GENRE_MAP = {
+                    "action": "action", "adventure": "action",
+                    "comedy": "comedy",
+                    "drama": "drama",
+                    "romance": "romance",
+                    "thriller": "thriller", "crime": "thriller", "film-noir": "thriller",
+                    "sci-fi": "sci_fi", "fantasy": "sci_fi",
+                    "horror": "horror",
+                    "documentary": "documentary", "war": "documentary",
+                    "musical": "comedy", "animation": "comedy", "children's": "comedy",
+                    "mystery": "thriller", "western": "action",
+                }
+
+                updated_cats = set()
+                profile = profile_svc.get_profile(event.user_id)
+                if profile and delta != 0.0:
+                    for genre in genres:
+                        cat = GENRE_MAP.get(genre.lower())
+                        if cat and cat not in updated_cats:
+                            old_w = profile["interests"].get(cat, 0.5)
+                            new_w = max(0.0, min(1.0, old_w + delta))
+                            profile_svc.update_user_interest(event.user_id, cat, new_w)
+                            updated_cats.add(cat)
+
+                if updated_cats:
+                    logger.info(
+                        "interest_profile_updated_from_event",
+                        user_id=event.user_id,
+                        item_id=event.item_id,
+                        event_type=evt,
+                        delta=round(delta, 3),
+                        categories_updated=list(updated_cats),
+                    )
+        except Exception as e:
+            logger.warning("interest_profile_update_failed", error=str(e))
+            # Never block the event response
+
         # 🔥 DYNAMIC BEHAVIOR: Update user features in real-time
         try:
             feature_store_service = get_feature_store_service()

@@ -24,7 +24,6 @@ lightgbm==4.1.0
 implicit==0.7.2  # Matrix Factorization (ALS)
 
 # Embeddings and Vector Search
-sentence-transformers==2.3.1
 qdrant-client==1.7.0
 faiss-cpu==1.7.4
 

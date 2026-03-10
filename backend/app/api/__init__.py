@@ -17,6 +17,7 @@ from .events import router as events_router
 from .metrics import router as metrics_router
 from .health import router as health_router
 from .mlops import router as mlops_router
+from .users import router as users_router
 
 __all__ = [
     "recommend_router",
@@ -24,4 +25,5 @@ __all__ = [
     "metrics_router",
     "health_router",
     "mlops_router",
+    "users_router",
 ]

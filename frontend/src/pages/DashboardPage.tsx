@@ -1,206 +1,344 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { metricsApi } from '../services/api';
+import {
+  AreaChart, Area, PieChart, Pie, Cell,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, LineChart, Line, Legend,
+} from 'recharts';
+import { metricsApi, userApi, eventsApi } from '../services/api';
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+const DEMO_USERS  = ['alice', 'bob', 'carol', 'dave', 'eve', 'frank'];
+const DEMO_ITEMS  = Array.from({ length: 20 }, (_, i) => i + 1);
+const DEMO_EVENTS = ['view', 'like', 'dislike', 'click', 'rating'] as const;
+
+async function fireDemoEvent() {
+  const user   = DEMO_USERS[Math.floor(Math.random() * DEMO_USERS.length)];
+  const item   = DEMO_ITEMS[Math.floor(Math.random() * DEMO_ITEMS.length)];
+  const type   = DEMO_EVENTS[Math.floor(Math.random() * DEMO_EVENTS.length)];
+  const rating = type === 'rating' ? Math.floor(Math.random() * 5) + 1 : undefined;
+  try {
+    await eventsApi.logEvent({ user_id: user, item_id: item, event_type: type, rating });
+  } catch { /* ignore */ }
+}
+
+const PALETTE = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16'];
+
+/* ─── tiny helpers ─────────────────────────────────────────────────── */
+const card = (extra: React.CSSProperties = {}): React.CSSProperties => ({
+  background: 'linear-gradient(145deg, rgba(30,41,59,0.9), rgba(15,23,42,0.95))',
+  border: '1px solid rgba(148,163,184,0.12)',
+  borderRadius: '1.25rem',
+  padding: '1.5rem',
+  boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+  backdropFilter: 'blur(12px)',
+  ...extra,
+});
+
+const kpiCard = (gradient: string): React.CSSProperties => ({
+  background: gradient,
+  borderRadius: '1.25rem',
+  padding: '1.5rem',
+  boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.5rem',
+  transition: 'transform 0.2s, box-shadow 0.2s',
+  cursor: 'default',
+  position: 'relative',
+  overflow: 'hidden',
+});
+
+const statBox = (color: string): React.CSSProperties => ({
+  background: 'rgba(15,23,42,0.6)',
+  border: `1px solid ${color}33`,
+  borderRadius: '1rem',
+  padding: '1.25rem',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.4rem',
+  transition: 'border-color 0.2s',
+});
 
 export default function DashboardPage() {
-  const [historicalData, setHistoricalData] = useState<Array<{
-    time: string;
-    events: number;
-  }>>([]);
+  const [liveData, setLiveData] = useState<Array<{ time: string; events: number; recs: number }>>([]);
+  const [profileUserId, setProfileUserId] = useState('');
+  const [profileInput, setProfileInput]   = useState('');
+  const [tick, setTick] = useState(0);
+  const [demoMode, setDemoMode] = useState(false);
+  const [demoCount, setDemoCount] = useState(0);
+
+  // pulse tick every second for animated elements
+  useEffect(() => { const id = setInterval(() => setTick(t => t + 1), 1000); return () => clearInterval(id); }, []);
+
+  // demo mode: fire a random event every 800ms
+  useEffect(() => {
+    if (!demoMode) return;
+    const id = setInterval(async () => {
+      await fireDemoEvent();
+      setDemoCount(c => c + 1);
+    }, 800);
+    return () => clearInterval(id);
+  }, [demoMode]);
 
   const { data: metrics } = useQuery({
     queryKey: ['dashboardMetrics'],
     queryFn: metricsApi.getDashboardMetrics,
-    refetchInterval: 5000,
+    refetchInterval: 3000,
+  });
+
+  const { data: topInterests } = useQuery({
+    queryKey: ['topInterests', profileUserId],
+    queryFn: () => userApi.getTopInterests(profileUserId),
+    enabled: Boolean(profileUserId),
+    refetchInterval: 3000,
+    retry: false,
   });
 
   useEffect(() => {
-    if (metrics) {
-      const now = new Date();
-      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-      
-      setHistoricalData((prev) => {
-        const newData = [...prev, {
-          time: timeStr,
-          events: metrics.events.total,
-        }];
-        return newData.slice(-20);
-      });
-    }
+    if (!metrics) return;
+    const now = new Date();
+    const t = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+    setLiveData(prev => [...prev, { time: t, events: metrics.events.total, recs: metrics.recommendations.total }].slice(-25));
   }, [metrics]);
 
-  if (!metrics) return <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-900 to-blue-900 flex items-center justify-center">
-    <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
-  </div>;
+  if (!metrics) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: '4rem', marginBottom: '1rem', animation: 'spin 1s linear infinite' }}>⚙️</div>
+        <p style={{ color: 'var(--text-muted)' }}>Loading dashboard…</p>
+      </div>
+    </div>
+  );
 
-  const eventTypesData = metrics.events.by_type ? Object.entries(metrics.events.by_type).map(([name, value]) => ({
-    name, value
-  })) : [];
+  const eventTypesData = Object.entries(metrics.events.by_type || {}).map(([name, value]) => ({ name, value }));
+  const uptime = metrics.system.uptime_seconds || 0;
+  const latency = metrics.recommendations.average_latency_ms || 0;
+  const isLive = tick % 2 === 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-900 to-blue-900 text-white p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="text-5xl animate-pulse">🤖</div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-              AI Monitor
+    <div style={{ background: 'var(--bg-primary)', minHeight: '100vh', padding: '2rem', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+        {/* ── HEADER ─────────────────────────────────────────────────── */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <h1 style={{ fontSize: '2.25rem', fontWeight: 800, margin: 0, background: 'linear-gradient(90deg, #6366f1, #ec4899, #06b6d4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+              AI Recommendation Monitor
             </h1>
+            <p style={{ color: 'var(--text-muted)', margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
+              Real-time MLOps Dashboard · MovieLens-100k · ALS + Cosine Similarity
+            </p>
           </div>
-          <div className="flex items-center gap-2 bg-green-500/20 px-6 py-3 rounded-full border-2 border-green-500 animate-pulse">
-            <div className="w-3 h-3 bg-green-400 rounded-full"></div>
-            <span className="text-lg text-green-300 font-bold">LIVE</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <button
+              onClick={() => setDemoMode(d => !d)}
+              style={{
+                padding: '0.5rem 1.25rem',
+                borderRadius: '2rem',
+                border: `1.5px solid ${demoMode ? '#f59e0b' : 'rgba(255,255,255,0.2)'}`,
+                background: demoMode ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.05)',
+                color: demoMode ? '#f59e0b' : '#94a3b8',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+                transition: 'all 0.3s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+              }}
+            >
+              <span style={{ fontSize: '1rem' }}>{demoMode ? '⏹' : '▶'}</span>
+              {demoMode ? `Demo ON · ${demoCount} events` : 'Demo Mode'}
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: isLive ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.08)', border: '1.5px solid rgba(16,185,129,0.5)', borderRadius: '2rem', padding: '0.5rem 1.25rem', transition: 'background 0.5s' }}>
+              <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981', boxShadow: isLive ? '0 0 12px #10b981' : 'none', transition: 'box-shadow 0.5s' }} />
+              <span style={{ color: '#10b981', fontWeight: 700, fontSize: '0.9rem', letterSpacing: '0.05em' }}>LIVE</span>
+            </div>
           </div>
         </div>
 
-        {/* Giant KPI Cards */}
-        <div className="grid grid-cols-4 gap-6">
-          <div className="group bg-gradient-to-br from-blue-500 to-blue-600 rounded-3xl p-8 shadow-2xl hover:scale-110 hover:rotate-1 transition-all duration-300 cursor-pointer">
-            <div className="text-7xl mb-4 group-hover:scale-125 transition-transform">⚡</div>
-            <div className="text-6xl font-black mb-2">{metrics.events.total}</div>
-            <div className="text-blue-100 text-sm opacity-70">{metrics.events.per_minute?.toFixed(1)}/min</div>
-          </div>
-
-          <div className="group bg-gradient-to-br from-green-500 to-emerald-600 rounded-3xl p-8 shadow-2xl hover:scale-110 hover:rotate-1 transition-all duration-300 cursor-pointer">
-            <div className="text-7xl mb-4 group-hover:scale-125 transition-transform">🎯</div>
-            <div className="text-6xl font-black mb-2">{metrics.recommendations.total}</div>
-            <div className="text-green-100 text-sm opacity-70">{metrics.recommendations.average_latency_ms?.toFixed(0)}ms</div>
-          </div>
-
-          <div className="group bg-gradient-to-br from-purple-500 to-purple-600 rounded-3xl p-8 shadow-2xl hover:scale-110 hover:rotate-1 transition-all duration-300 cursor-pointer">
-            <div className="text-7xl mb-4 group-hover:scale-125 transition-transform">🧠</div>
-            <div className="text-6xl font-black mb-2">{metrics.learning.user_embeddings_updated}</div>
-            <div className="text-purple-100 text-sm opacity-70">Learning</div>
-          </div>
-
-          <div className="group bg-gradient-to-br from-orange-500 to-red-500 rounded-3xl p-8 shadow-2xl hover:scale-110 hover:rotate-1 transition-all duration-300 cursor-pointer">
-            <div className="text-7xl mb-4 group-hover:scale-125 transition-transform">⏱️</div>
-            <div className="text-6xl font-black mb-2">
-              {Math.floor((metrics.system.uptime_seconds || 0) / 3600)}
-              <span className="text-3xl opacity-70">h</span>
+        {/* ── KPI ROW ────────────────────────────────────────────────── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
+          {[
+            { label: 'Total Events', value: metrics.events.total, sub: `${(metrics.events.per_minute || 0).toFixed(1)}/min`, icon: '⚡', gradient: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', glow: '#6366f1' },
+            { label: 'Recommendations', value: metrics.recommendations.total, sub: `${latency.toFixed(0)} ms avg`, icon: '🎯', gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', glow: '#10b981' },
+            { label: 'Last Hour Events', value: metrics.events.last_hour, sub: `${metrics.recommendations.last_hour} recs`, icon: '📊', gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', glow: '#8b5cf6' },
+            { label: 'Uptime', value: `${Math.floor(uptime/3600)}h ${Math.floor((uptime%3600)/60)}m`, sub: `P95: ${(metrics.recommendations.p95_latency_ms||0).toFixed(0)}ms`, icon: '⏱️', gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', glow: '#f59e0b' },
+          ].map(({ label, value, sub, icon, gradient, glow }) => (
+            <div key={label} style={kpiCard(gradient)}
+              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-4px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = `0 16px 40px ${glow}55`; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = ''; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 8px 32px rgba(0,0,0,0.5)'; }}
+            >
+              <div style={{ position: 'absolute', top: '-20px', right: '-10px', fontSize: '6rem', opacity: 0.15 }}>{icon}</div>
+              <div style={{ fontSize: '1.8rem' }}>{icon}</div>
+              <div style={{ fontSize: '2.2rem', fontWeight: 900, color: '#fff', lineHeight: 1 }}>{value}</div>
+              <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>{label}</div>
+              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>{sub}</div>
             </div>
-            <div className="text-orange-100 text-sm opacity-70">{Math.floor(((metrics.system.uptime_seconds || 0) % 3600) / 60)}min</div>
-          </div>
+          ))}
         </div>
 
-        {/* Chart Section */}
-        <div className="grid grid-cols-3 gap-6">
-          
-          {/* Activity Chart */}
-          <div className="col-span-2 bg-gray-800/50 backdrop-blur-xl rounded-3xl p-8 border border-gray-700/50 shadow-2xl">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="text-3xl">📈</div>
-              <h2 className="text-2xl font-bold">Activity Stream</h2>
+        {/* ── CHARTS ROW 1 ───────────────────────────────────────────── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem' }}>
+
+          {/* Live activity area chart */}
+          <div style={card()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>📈 Live Activity Stream</h2>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', background: 'rgba(99,102,241,0.15)', padding: '0.2rem 0.6rem', borderRadius: '1rem' }}>auto-refresh 3s</span>
             </div>
-            <ResponsiveContainer width="100%" height={280}>
-              <AreaChart data={historicalData}>
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={liveData}>
                 <defs>
-                  <linearGradient id="colorEvents" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.9}/>
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                  <linearGradient id="gEvents" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor="#6366f1" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0.05}/>
+                  </linearGradient>
+                  <linearGradient id="gRecs" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor="#10b981" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.05}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
-                <XAxis dataKey="time" stroke="#9ca3af" tick={{ fontSize: 12 }} />
-                <YAxis stroke="#9ca3af" tick={{ fontSize: 12 }} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '12px' }}
-                  labelStyle={{ color: '#fff', fontWeight: 'bold' }}
-                />
-                <Area type="monotone" dataKey="events" stroke="#3b82f6" strokeWidth={3} fill="url(#colorEvents)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" />
+                <XAxis dataKey="time" stroke="#475569" tick={{ fontSize: 10, fill: '#64748b' }} />
+                <YAxis stroke="#475569" tick={{ fontSize: 10, fill: '#64748b' }} />
+                <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(148,163,184,0.2)', borderRadius: '0.75rem', fontSize: '0.8rem' }} />
+                <Legend wrapperStyle={{ fontSize: '0.8rem', color: '#94a3b8' }} />
+                <Area type="monotone" dataKey="events" name="Events" stroke="#6366f1" strokeWidth={2.5} fill="url(#gEvents)" dot={false} />
+                <Area type="monotone" dataKey="recs"   name="Recs"   stroke="#10b981" strokeWidth={2.5} fill="url(#gRecs)"   dot={false} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Donut Chart */}
-          <div className="bg-gray-800/50 backdrop-blur-xl rounded-3xl p-8 border border-gray-700/50 shadow-2xl">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="text-3xl">📊</div>
-              <h2 className="text-2xl font-bold">Types</h2>
-            </div>
-            <ResponsiveContainer width="100%" height={200}>
+          {/* Event type donut */}
+          <div style={card({ display: 'flex', flexDirection: 'column' })}>
+            <h2 style={{ margin: '0 0 1rem', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>🍩 Event Breakdown</h2>
+            <ResponsiveContainer width="100%" height={170}>
               <PieChart>
-                <Pie
-                  data={eventTypesData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {eventTypesData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
+                <Pie data={eventTypesData} cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={4} dataKey="value" strokeWidth={0}>
+                  {eventTypesData.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
                 </Pie>
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '12px' }}
-                />
+                <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(148,163,184,0.2)', borderRadius: '0.75rem', fontSize: '0.8rem' }} />
               </PieChart>
             </ResponsiveContainer>
-            <div className="mt-6 space-y-3">
-              {eventTypesData.map((item, index) => (
-                <div key={item.name} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
-                    <span className="font-semibold capitalize">{item.name}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.5rem' }}>
+              {eventTypesData.map((item, i) => (
+                <div key={item.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: PALETTE[i % PALETTE.length], flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{item.name}</span>
                   </div>
-                  <span className="text-2xl font-bold">{item.value}</span>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 700, color: PALETTE[i % PALETTE.length] }}>{item.value}</span>
+                </div>
+              ))}
+              {eventTypesData.length === 0 && <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>No events yet — interact with movies!</p>}
+            </div>
+          </div>
+        </div>
+
+        {/* ── MODEL METRICS ROW ──────────────────────────────────────── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0.75rem' }}>
+          {[
+            { label: 'RMSE',      value: metrics.model.rmse?.toFixed(3),      icon: '🎯', color: '#10b981' },
+            { label: 'R² Score',  value: metrics.model.r2_score?.toFixed(3),  icon: '📐', color: '#6366f1' },
+            { label: 'MAP@10',    value: metrics.model.map_at_10?.toFixed(3), icon: '🏆', color: '#f59e0b' },
+            { label: 'Cache Hit', value: `${((metrics.recommendations.cache_hit_rate||0)*100).toFixed(0)}%`, icon: '⚡', color: '#06b6d4' },
+            { label: 'Users',     value: metrics.learning.total_users || 0,   icon: '👥', color: '#8b5cf6' },
+            { label: 'Movies',    value: metrics.learning.total_items || 0,   icon: '🎬', color: '#ec4899' },
+          ].map(({ label, value, icon, color }) => (
+            <div key={label} style={statBox(color)}
+              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = color + '66'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = color + '33'; }}
+            >
+              <div style={{ fontSize: '1.5rem' }}>{icon}</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color, lineHeight: 1 }}>{value ?? '—'}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>{label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── LATENCY + INTERESTS ROW ────────────────────────────────── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '1rem' }}>
+
+          {/* Latency line chart */}
+          <div style={card()}>
+            <h2 style={{ margin: '0 0 1.25rem', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>⚡ Response Latency (ms)</h2>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={liveData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" />
+                <XAxis dataKey="time" stroke="#475569" tick={{ fontSize: 10, fill: '#64748b' }} />
+                <YAxis stroke="#475569" tick={{ fontSize: 10, fill: '#64748b' }} />
+                <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(148,163,184,0.2)', borderRadius: '0.75rem', fontSize: '0.8rem' }} formatter={() => [`${latency.toFixed(1)} ms`, 'Latency']} />
+                <Line type="monotone" dataKey="recs" name="Latency" stroke="#f59e0b" strokeWidth={2.5} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.75rem' }}>
+              {[
+                { label: 'Avg', value: `${latency.toFixed(1)}ms`, color: '#10b981' },
+                { label: 'P95', value: `${(metrics.recommendations.p95_latency_ms||0).toFixed(0)}ms`, color: '#f59e0b' },
+                { label: 'Version', value: metrics.model.version || 'v1', color: '#6366f1' },
+              ].map(({ label, value, color }) => (
+                <div key={label} style={{ flex: 1, background: `${color}18`, border: `1px solid ${color}33`, borderRadius: '0.75rem', padding: '0.6rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color }}>{value}</div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{label}</div>
                 </div>
               ))}
             </div>
           </div>
+
+          {/* Top Interests bar chart */}
+          <div style={card()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+              <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>🧠 User Interest Vector</h2>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <input
+                  placeholder="user ID…"
+                  value={profileInput}
+                  onChange={e => setProfileInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && setProfileUserId(profileInput.trim())}
+                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '0.6rem', padding: '0.4rem 0.75rem', color: 'white', outline: 'none', width: '150px', fontSize: '0.8rem' }}
+                />
+                <button
+                  onClick={() => setProfileUserId(profileInput.trim())}
+                  disabled={!profileInput.trim()}
+                  style={{ padding: '0.4rem 0.9rem', borderRadius: '0.6rem', background: 'linear-gradient(135deg,#6366f1,#ec4899)', border: 'none', color: 'white', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}
+                >Track</button>
+              </div>
+            </div>
+            {profileUserId && topInterests && topInterests.length > 0 ? (
+              <>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0 0 0.75rem' }}>
+                  <span style={{ color: '#a78bfa', fontWeight: 600 }}>{profileUserId}</span> · live · updates on every interaction
+                </p>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={topInterests} layout="vertical" margin={{ left: 10, right: 40, top: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" horizontal={false} />
+                    <XAxis type="number" domain={[0,1]} stroke="#475569" tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={v => `${Math.round(v*100)}%`} />
+                    <YAxis type="category" dataKey="label" stroke="#475569" tick={{ fontSize: 11, fill: '#94a3b8' }} width={85} />
+                    <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(148,163,184,0.2)', borderRadius: '0.75rem', fontSize: '0.8rem' }} formatter={(v: number) => [`${Math.round(v*100)}%`, 'Interest']} />
+                    <Bar dataKey="weight" radius={[0,6,6,0]} minPointSize={4} label={{ position: 'right', fontSize: 11, fill: '#94a3b8', formatter: (v: number) => `${Math.round(v*100)}%` }}>
+                      {topInterests.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '220px', gap: '0.75rem', color: 'var(--text-muted)' }}>
+                <div style={{ fontSize: '3rem' }}>🎭</div>
+                <p style={{ textAlign: 'center', fontSize: '0.85rem', maxWidth: '260px', lineHeight: 1.5 }}>
+                  {profileUserId ? `No profile found for "${profileUserId}". Create one with ➕ New User.` : 'Enter a user ID to see their interest vector update in real-time as they interact with movies.'}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Compact Stats Grid */}
-        <div className="grid grid-cols-6 gap-4">
-          <div className="bg-gray-800/50 backdrop-blur rounded-2xl p-5 border border-gray-700/50">
-            <div className="text-3xl mb-2">🎯</div>
-            <div className="text-3xl font-bold text-green-400">{metrics.model.rmse?.toFixed(3)}</div>
-            <div className="text-xs text-gray-400 mt-1">RMSE</div>
-          </div>
-
-          <div className="bg-gray-800/50 backdrop-blur rounded-2xl p-5 border border-gray-700/50">
-            <div className="text-3xl mb-2">📊</div>
-            <div className="text-3xl font-bold text-blue-400">{metrics.model.r2_score?.toFixed(3)}</div>
-            <div className="text-xs text-gray-400 mt-1">R² Score</div>
-          </div>
-
-          <div className="bg-gray-800/50 backdrop-blur rounded-2xl p-5 border border-gray-700/50">
-            <div className="text-3xl mb-2">🔟</div>
-            <div className="text-3xl font-bold text-purple-400">{metrics.model.map_at_10?.toFixed(3)}</div>
-            <div className="text-xs text-gray-400 mt-1">MAP@10</div>
-          </div>
-
-          <div className="bg-gray-800/50 backdrop-blur rounded-2xl p-5 border border-gray-700/50">
-            <div className="text-3xl mb-2">⚡</div>
-            <div className="text-3xl font-bold text-yellow-400">{metrics.system.cache_hit_rate?.toFixed(0)}%</div>
-            <div className="text-xs text-gray-400 mt-1">Cache</div>
-          </div>
-
-          <div className="bg-gray-800/50 backdrop-blur rounded-2xl p-5 border border-gray-700/50">
-            <div className="text-3xl mb-2">👥</div>
-            <div className="text-3xl font-bold text-cyan-400">{metrics.feature_store?.total_users || 0}</div>
-            <div className="text-xs text-gray-400 mt-1">Users</div>
-          </div>
-
-          <div className="bg-gray-800/50 backdrop-blur rounded-2xl p-5 border border-gray-700/50">
-            <div className="text-3xl mb-2">🎬</div>
-            <div className="text-3xl font-bold text-pink-400">{metrics.feature_store?.total_items || 0}</div>
-            <div className="text-xs text-gray-400 mt-1">Items</div>
-          </div>
+        {/* ── FOOTER ─────────────────────────────────────────────────── */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', paddingTop: '0.5rem' }}>
+          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', boxShadow: isLive ? '0 0 8px #10b981' : 'none', transition: 'box-shadow 0.5s' }} />
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Refreshing every 3s · {new Date().toLocaleTimeString()}</span>
         </div>
 
-        {/* Footer */}
-        <div className="text-center text-gray-500 text-sm flex items-center justify-center gap-2">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span>Auto-refresh 5s</span>
-        </div>
       </div>
     </div>
   );

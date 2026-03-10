@@ -1,8 +1,9 @@
 // Real-Time Recommendation System - Interactive Learning Simulator
 import React,  { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { recommendationApi, eventsApi } from '../services/api';
+import { recommendationApi, eventsApi, userApi, INTEREST_CATEGORIES } from '../services/api';
 import type { RecommendationItem, EventType } from '../types';
+import type { InterestCategory } from '../services/api';
 
 const RecommendationsPage: React.FC = () => {
   const [userId, setUserId] = useState<string>('');
@@ -23,6 +24,24 @@ const RecommendationsPage: React.FC = () => {
   }>>([]);
   const [isLearning, setIsLearning] = useState(false);
   const [selectedRating, setSelectedRating] = useState<{[key: string]: number}>({});
+
+  // Interest profile state
+  const [showInterestPanel, setShowInterestPanel] = useState(false);
+  const [interests, setInterests] = useState<Record<InterestCategory, number>>(
+    () => Object.fromEntries(INTEREST_CATEGORIES.map(c => [c, 0.5])) as Record<InterestCategory, number>
+  );
+  const [profileSaved, setProfileSaved] = useState(false);
+
+  const createProfileMutation = useMutation({
+    mutationFn: (data: { userId: string; interests: Record<InterestCategory, number> }) =>
+      userApi.createProfile(data.userId, data.interests),
+    onSuccess: () => {
+      setProfileSaved(true);
+      setShowInterestPanel(false);
+      recommendMutation.mutate({ user_id: userId, num_recommendations: numRecommendations });
+    },
+    onError: (err) => console.error('Profile creation failed:', err),
+  });
 
   const recommendMutation = useMutation({
     mutationFn: (data: { user_id: string; num_recommendations: number }) =>
@@ -123,6 +142,17 @@ const RecommendationsPage: React.FC = () => {
   const handleExampleUser = (exampleId: string) => {
     setUserId(exampleId);
     recommendMutation.mutate({ user_id: exampleId, num_recommendations: numRecommendations });
+  };
+
+  const handleCreateNewUser = () => {
+    const newId = `user_${Date.now().toString().slice(-6)}`;
+    setUserId(newId);
+    setInteractions([]);
+    setRecommendations([]);
+    setRequestMeta(null);
+    setProfileSaved(false);
+    setInterests(Object.fromEntries(INTEREST_CATEGORIES.map(c => [c, 0.5])) as Record<InterestCategory, number>);
+    setShowInterestPanel(true);
   };
 
   return (
@@ -264,8 +294,31 @@ const RecommendationsPage: React.FC = () => {
         </form>
 
         {/* Example Users */}
-        <div style={{ marginTop: 'var(--spacing-lg)', display: 'flex', gap: 'var(--spacing-sm)', flexWrap: 'wrap' }}>
-          <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginRight: 'var(--spacing-xs)' }}>
+        <div style={{ marginTop: 'var(--spacing-lg)', display: 'flex', gap: 'var(--spacing-sm)', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            onClick={handleCreateNewUser}
+            disabled={recommendMutation.isPending}
+            style={{
+              padding: '0.375rem 0.9rem',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-primary)',
+              background: 'rgba(99, 102, 241, 0.15)',
+              color: 'var(--color-primary)',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              transition: 'all var(--transition-base)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(99, 102, 241, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(99, 102, 241, 0.15)';
+            }}
+          >
+            ➕ New User
+          </button>
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginLeft: 'var(--spacing-xs)', marginRight: 'var(--spacing-xs)' }}>
             Try examples:
           </span>
           {['user_123', 'new_user_456', 'active_user_789'].map((exampleId) => (
@@ -297,6 +350,119 @@ const RecommendationsPage: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* Dynamic Interest Profile Panel */}
+      {showInterestPanel && userId && (
+        <div className="card" style={{
+          marginBottom: 'var(--spacing-xl)',
+          background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(236, 72, 153, 0.08))',
+          border: '1px solid rgba(99, 102, 241, 0.4)',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
+            <div>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+                🧠 Configure Interest Profile
+              </h3>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                Set interest weights for <strong>{userId}</strong> — recommendations will use cosine similarity against these vectors.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowInterestPanel(false)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.2rem' }}
+            >✕</button>
+          </div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: 'var(--spacing-md)',
+            marginBottom: 'var(--spacing-lg)',
+          }}>
+            {INTEREST_CATEGORIES.map((cat) => {
+              const val = interests[cat as InterestCategory];
+              const pct = Math.round(val * 100);
+              const hue = Math.round(val * 120); // red (0) → green (120)
+              return (
+                <div key={cat} style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.875rem', fontWeight: 600, textTransform: 'capitalize' }}>
+                      {cat.replace('_', '-')}
+                    </label>
+                    <span style={{
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      color: `hsl(${hue}, 70%, 60%)`,
+                      minWidth: '36px',
+                      textAlign: 'right',
+                    }}>
+                      {pct}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={val}
+                    onChange={(e) =>
+                      setInterests(prev => ({ ...prev, [cat]: parseFloat(e.target.value) }))
+                    }
+                    style={{ width: '100%', accentColor: `hsl(${hue}, 70%, 60%)` }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', gap: 'var(--spacing-md)', justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => setShowInterestPanel(false)}
+              style={{
+                padding: '0.5rem 1.25rem',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-color)',
+                background: 'transparent',
+                cursor: 'pointer',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              className="btn btn-primary"
+              disabled={createProfileMutation.isPending}
+              onClick={() =>
+                createProfileMutation.mutate({ userId, interests })
+              }
+            >
+              {createProfileMutation.isPending ? '⏳ Saving...' : '✨ Save & Get Recommendations'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Profile confirmed badge */}
+      {profileSaved && !showInterestPanel && (
+        <div style={{
+          background: 'rgba(34, 197, 94, 0.12)',
+          border: '1px solid rgba(34, 197, 94, 0.4)',
+          borderRadius: 'var(--radius-md)',
+          padding: '0.6rem var(--spacing-md)',
+          marginBottom: 'var(--spacing-lg)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          fontSize: '0.875rem',
+        }}>
+          <span>✅</span>
+          <span>Dynamic interest profile active — scoring via cosine similarity.</span>
+          <button
+            onClick={() => setShowInterestPanel(true)}
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'underline' }}
+          >
+            Edit interests
+          </button>
+        </div>
+      )}
 
       {/* Metadata Card */}
       {requestMeta && (
@@ -439,7 +605,14 @@ const RecommendationsPage: React.FC = () => {
                     color: 'var(--text-primary)',
                     marginBottom: '0.25rem'
                   }}>
-                    {item.item_id}
+                    {item.metadata?.title && item.metadata.title !== item.item_id
+                      ? item.metadata.title as string
+                      : item.item_id}
+                    {item.metadata?.year && (
+                      <span style={{ fontWeight: 400, fontSize: '0.85rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
+                        ({item.metadata.year as number})
+                      </span>
+                    )}
                   </div>
                   {item.reason && (
                     <div style={{
@@ -450,21 +623,31 @@ const RecommendationsPage: React.FC = () => {
                       {item.reason}
                     </div>
                   )}
-                  {item.metadata && (
+                  {item.metadata?.genres && Array.isArray(item.metadata.genres) && (item.metadata.genres as string[]).length > 0 && (
                     <div style={{
                       display: 'flex',
-                      gap: 'var(--spacing-md)',
+                      gap: '0.4rem',
+                      flexWrap: 'wrap',
                       marginTop: 'var(--spacing-xs)',
-                      fontSize: '0.75rem',
-                      color: 'var(--text-muted)'
                     }}>
-                      {Object.entries(item.metadata).map(([key, value]) => (
-                        <span key={key}>
-                          {key}: {String(value)}
+                      {(item.metadata.genres as string[]).map((g) => (
+                        <span key={g} style={{
+                          fontSize: '0.7rem',
+                          padding: '0.15rem 0.5rem',
+                          borderRadius: '999px',
+                          background: 'rgba(99,102,241,0.15)',
+                          border: '1px solid rgba(99,102,241,0.3)',
+                          color: 'var(--color-primary)',
+                          fontWeight: 500,
+                        }}>
+                          {g}
                         </span>
                       ))}
                     </div>
                   )}
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.3rem', opacity: 0.5 }}>
+                    {item.item_id}
+                  </div>
                 </div>
 
                 {/* Score */}

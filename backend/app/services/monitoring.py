@@ -302,6 +302,7 @@ class MonitoringService:
         self._start_time = time.time()
         self._prediction_count = 0
         self._event_count = 0
+        self._events_by_type: Dict[str, int] = {}
         self._cache_hits = 0
         self._cold_start_count = 0
 
@@ -348,6 +349,7 @@ class MonitoringService:
     def record_event(self, event_type: str) -> None:
         """Record an event."""
         self._event_count += 1
+        self._events_by_type[event_type] = self._events_by_type.get(event_type, 0) + 1
         EVENT_COUNT.labels(event_type=event_type).inc()
 
     def record_cold_start(self) -> None:
@@ -411,12 +413,7 @@ class MonitoringService:
             "total_events": self._event_count,
             "events_last_hour": min(self._event_count, 100),  # Simplified
             "events_per_minute": self._event_count / max(self.get_uptime_seconds() / 60, 1),
-            "events_by_type": {
-                "view": int(self._event_count * 0.4),  # Simplified estimates
-                "like": int(self._event_count * 0.3),
-                "rating": int(self._event_count * 0.2),
-                "click": int(self._event_count * 0.1),
-            }
+            "events_by_type": dict(self._events_by_type)
         }
 
     def set_model_info(
