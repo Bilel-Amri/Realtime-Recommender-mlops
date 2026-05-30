@@ -10,6 +10,7 @@ All endpoints include proper error handling, logging, and metrics.
 """
 
 import time
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -261,13 +262,11 @@ async def get_model_info(
         )
 
 
-def __get_model_timestamp(version: str) -> __import__("datetime").datetime:
+def __get_model_timestamp(version: str) -> datetime:
     """
     Get timestamp for model version.
 
     This is a placeholder that returns the current time.
     In production, this would query MLflow for the actual timestamp.
     """
-    from datetime import datetime
-
     return datetime.utcnow()
