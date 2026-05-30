@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   AreaChart, Area, PieChart, Pie, Cell,
@@ -6,15 +6,16 @@ import {
   Tooltip, ResponsiveContainer, LineChart, Line, Legend,
 } from 'recharts';
 import { metricsApi, userApi, eventsApi } from '../services/api';
+import type { EventType } from '../types';
 
 const DEMO_USERS  = ['alice', 'bob', 'carol', 'dave', 'eve', 'frank'];
-const DEMO_ITEMS  = Array.from({ length: 20 }, (_, i) => i + 1);
+const DEMO_ITEMS  = Array.from({ length: 20 }, (_, i) => String(i + 1));
 const DEMO_EVENTS = ['view', 'like', 'dislike', 'click', 'rating'] as const;
 
 async function fireDemoEvent() {
   const user   = DEMO_USERS[Math.floor(Math.random() * DEMO_USERS.length)];
   const item   = DEMO_ITEMS[Math.floor(Math.random() * DEMO_ITEMS.length)];
-  const type   = DEMO_EVENTS[Math.floor(Math.random() * DEMO_EVENTS.length)];
+  const type   = DEMO_EVENTS[Math.floor(Math.random() * DEMO_EVENTS.length)] as EventType;
   const rating = type === 'rating' ? Math.floor(Math.random() * 5) + 1 : undefined;
   try {
     await eventsApi.logEvent({ user_id: user, item_id: item, event_type: type, rating });
@@ -122,7 +123,7 @@ export default function DashboardPage() {
         {/* ── HEADER ─────────────────────────────────────────────────── */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
-            <h1 style={{ fontSize: '2.25rem', fontWeight: 800, margin: 0, background: 'linear-gradient(90deg, #6366f1, #ec4899, #06b6d4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+            <h1 style={{ fontSize: '2.25rem', fontWeight: 800, margin: 0, background: 'linear-gradient(90deg, #6366f1, #ec4899, #06b6d4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
               AI Recommendation Monitor
             </h1>
             <p style={{ color: 'var(--text-muted)', margin: '0.25rem 0 0', fontSize: '0.875rem' }}>
@@ -150,7 +151,7 @@ export default function DashboardPage() {
               <span style={{ fontSize: '1rem' }}>{demoMode ? '⏹' : '▶'}</span>
               {demoMode ? `Demo ON · ${demoCount} events` : 'Demo Mode'}
             </button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: isLive ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.08)', border: '1.5px solid rgba(16,185,129,0.5)', borderRadius: '2rem', padding: '0.5rem 1.25rem', transition: 'background 0.5s' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: isLive ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.08)', border: '1.5px solid rgba(16,185,129,0.5)', borderRadius: '2rem', padding: '0.35rem 0.85rem' }}>
               <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981', boxShadow: isLive ? '0 0 12px #10b981' : 'none', transition: 'box-shadow 0.5s' }} />
               <span style={{ color: '#10b981', fontWeight: 700, fontSize: '0.9rem', letterSpacing: '0.05em' }}>LIVE</span>
             </div>
@@ -296,12 +297,12 @@ export default function DashboardPage() {
                   value={profileInput}
                   onChange={e => setProfileInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && setProfileUserId(profileInput.trim())}
-                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '0.6rem', padding: '0.4rem 0.75rem', color: 'white', outline: 'none', width: '150px', fontSize: '0.8rem' }}
+                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '0.6rem', padding: '0.4rem 0.75rem', color: 'white', outline: 'none', width: '140px', fontSize: '0.85rem' }}
                 />
                 <button
                   onClick={() => setProfileUserId(profileInput.trim())}
                   disabled={!profileInput.trim()}
-                  style={{ padding: '0.4rem 0.9rem', borderRadius: '0.6rem', background: 'linear-gradient(135deg,#6366f1,#ec4899)', border: 'none', color: 'white', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}
+                  style={{ padding: '0.4rem 0.9rem', borderRadius: '0.6rem', background: 'linear-gradient(135deg,#6366f1,#ec4899)', border: 'none', color: 'white', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}
                 >Track</button>
               </div>
             </div>
@@ -315,7 +316,7 @@ export default function DashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" horizontal={false} />
                     <XAxis type="number" domain={[0,1]} stroke="#475569" tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={v => `${Math.round(v*100)}%`} />
                     <YAxis type="category" dataKey="label" stroke="#475569" tick={{ fontSize: 11, fill: '#94a3b8' }} width={85} />
-                    <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(148,163,184,0.2)', borderRadius: '0.75rem', fontSize: '0.8rem' }} formatter={(v: number) => [`${Math.round(v*100)}%`, 'Interest']} />
+                    <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(148,163,184,0.2)', borderRadius: '0.75rem', fontSize: '0.8rem' }} formatter={(v: number) => `${Math.round(v*100)}%`} />
                     <Bar dataKey="weight" radius={[0,6,6,0]} minPointSize={4} label={{ position: 'right', fontSize: 11, fill: '#94a3b8', formatter: (v: number) => `${Math.round(v*100)}%` }}>
                       {topInterests.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
                     </Bar>
@@ -326,7 +327,7 @@ export default function DashboardPage() {
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '220px', gap: '0.75rem', color: 'var(--text-muted)' }}>
                 <div style={{ fontSize: '3rem' }}>🎭</div>
                 <p style={{ textAlign: 'center', fontSize: '0.85rem', maxWidth: '260px', lineHeight: 1.5 }}>
-                  {profileUserId ? `No profile found for "${profileUserId}". Create one with ➕ New User.` : 'Enter a user ID to see their interest vector update in real-time as they interact with movies.'}
+                  {profileUserId ? `No profile found for "${profileUserId}". Create one with ➕ New User.` : 'Enter a user ID to see their interest vector update in real-time as they interact with recommendations.'}
                 </p>
               </div>
             )}

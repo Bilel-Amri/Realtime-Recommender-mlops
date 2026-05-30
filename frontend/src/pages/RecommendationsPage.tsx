@@ -1,5 +1,5 @@
 // Real-Time Recommendation System - Interactive Learning Simulator
-import React,  { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { recommendationApi, eventsApi, userApi, INTEREST_CATEGORIES } from '../services/api';
 import type { RecommendationItem, EventType } from '../types';
@@ -606,7 +606,7 @@ const RecommendationsPage: React.FC = () => {
                     marginBottom: '0.25rem'
                   }}>
                     {item.metadata?.title && item.metadata.title !== item.item_id
-                      ? item.metadata.title as string
+                      ? (item.metadata.title as string)
                       : item.item_id}
                     {item.metadata?.year && (
                       <span style={{ fontWeight: 400, fontSize: '0.85rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
